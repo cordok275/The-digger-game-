@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Бункер: Вентшахта</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0704; font-family: 'Courier New', monospace; }
+  #root { position: relative; width: 100%; height: 100vh; min-height: 380px; overflow: hidden; }
+  @supports (height: 100dvh) { #root { height: 100dvh; } }
+  #mount { position: absolute; inset: 0; touch-action: none; }
+  #mount canvas { display: block; touch-action: none; }
+  .abs { position: absolute; }
+  .inset0 { top:0; left:0; right:0; bottom:0; }
+
+  #vignette { box-shadow: inset 0 0 160px 50px rgba(0,0,0,0.75); pointer-events: none; }
+
+  #maskOverlay { display: none; z-index: 15; pointer-events: none; }
+  #maskOverlay .r1 { position:absolute; inset:0; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 26%, rgba(8,12,6,0.62) 54%, rgba(3,5,2,0.97) 76%); }
+  #maskOverlay .r2 { position:absolute; inset:0; background: rgba(90,120,70,0.07); mix-blend-mode: multiply; }
+  #maskOverlay .bridge { position:absolute; left:50%; top:18%; width:4px; height:64%; margin-left:-2px; background: rgba(8,8,6,0.9); }
+  #maskOverlay .strap { position:absolute; left:50%; top:6%; width:44%; height:6px; margin-left:-22%; background: rgba(8,8,6,0.85); border-radius:4px; }
+
+  #hud { display: none; }
+  #hudTop { top: 8px; left: 8px; right: 8px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:5px; z-index:16; }
+  .panel { background: rgba(10,7,4,0.62); border:1px solid rgba(201,162,74,0.35); padding:6px 10px; backdrop-filter: blur(1px); color:#c9a24a; }
+  .panel .label { color:#8a6f2a; font-size: clamp(8px,1.6vw,10px); letter-spacing:2px; }
+  .panel .val { font-size: clamp(12px,2.2vw,17px); color:#f0d78c; }
+  #maskToggleBtn { cursor: pointer; touch-action: manipulation; }
+
+  #crosshair { top:50%; left:50%; width:6px; height:6px; margin-top:-3px; margin-left:-3px; border:1px solid #f0d78c; border-radius:50%; box-shadow:0 0 6px rgba(240,215,140,0.7); pointer-events:none; }
+  #prompt { top:56%; left:50%; transform:translateX(-50%); font-size:12px; color:#f0d78c; letter-spacing:1px; text-shadow:0 0 6px rgba(0,0,0,0.9); white-space:nowrap; pointer-events:none; }
+  #toast { left:50%; transform:translateX(-50%); font-size:14px; color:#e2734a; text-shadow:0 0 8px rgba(226,115,74,0.9); opacity:0; transition:opacity .3s; letter-spacing:2px; white-space:nowrap; pointer-events:none; }
+  body:not(.touch-mode) #toast { bottom:60px; }
+  body.touch-mode #toast { bottom:165px; }
+
+  #hintDesktop { display:none; bottom:14px; left:50%; transform:translateX(-50%); font-size:11px; color:#8a6f2a; letter-spacing:1px; pointer-events:none; }
+  #hintSwipe { display:none; bottom: calc(128px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); font-size:10px; color:#8a6f2a; letter-spacing:1px; pointer-events:none; }
+
+  #joyZone { display:none; left:18px; bottom: calc(22px + env(safe-area-inset-bottom)); width:100px; height:100px; border-radius:50%; border:1px solid rgba(201,162,74,0.35); background:rgba(10,7,4,0.42); touch-action:none; }
+  #joyKnob { position:absolute; left:50%; top:50%; width:40px; height:40px; margin-left:-20px; margin-top:-20px; border-radius:50%; background:rgba(201,162,74,0.5); border:1px solid #f0d78c; transition: transform .02s linear; }
+  #interactBtn { display:none; right:18px; bottom: calc(22px + env(safe-area-inset-bottom)); width:84px; height:84px; border-radius:50%; align-items:center; justify-content:center; border:1px solid #e2734a; background:rgba(226,115,74,0.18); color:#e2734a; font-size:12px; letter-spacing:1px; text-align:center; touch-action:none; }
+  @media (min-width:420px) {
+    #joyZone { width:112px; height:112px; } #joyKnob { width:44px; height:44px; margin-left:-22px; margin-top:-22px; }
+    #interactBtn { width:92px; height:92px; font-size:13px; }
+  }
+  @media (min-width:680px) {
+    #joyZone { width:136px; height:136px; } #joyKnob { width:52px; height:52px; margin-left:-26px; margin-top:-26px; }
+    #interactBtn { width:110px; height:110px; font-size:14px; }
+  }
+  @media (orientation: landscape) and (max-height:430px) {
+    #joyZone { width:84px; height:84px; bottom: calc(8px + env(safe-area-inset-bottom)); }
+    #joyKnob { width:34px; height:34px; margin-left:-17px; margin-top:-17px; }
+    #interactBtn { width:70px; height:70px; font-size:10px; bottom: calc(8px + env(safe-area-inset-bottom)); }
+    #hudTop { top:4px; gap:3px; }
+    #hintSwipe { display:none !important; }
+  }
+  @media (max-height:360px) { #hintSwipe { display:none !important; } }
+
+  #startScreen, #endScreen { display:flex; z-index:20; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:20px; overflow-y:auto; }
+  #startScreen { background:#0a0704; }
+  #endScreen { display:none; background:rgba(4,3,1,0.94); }
+  #startScreen h1 { font-size: clamp(24px,5.5vw,40px); letter-spacing: clamp(3px,1vw,7px); color:#f0d78c; text-shadow:0 0 18px rgba(201,162,74,0.6); margin-bottom:6px; }
+  #startScreen h1 span { color:#e2734a; }
+  #startScreen .sub { color:#8a6f2a; font-size: clamp(10px,1.6vw,13px); letter-spacing:3px; margin-bottom:22px; }
+  #startScreen .rules, #endScreen p { font-size: clamp(12px,1.8vw,14px); line-height:1.85; color:#c9a24a; margin-bottom:22px; max-width:480px; }
+  #startScreen .rules b, #endScreen b { color:#f0d78c; }
+  .startbtn { border:1px solid #c9a24a; padding:12px 34px; font-size:14px; letter-spacing:4px; color:#f0d78c; cursor:pointer; }
+  #endScreen h2 { font-size: clamp(22px,5vw,34px); letter-spacing:5px; color:#f0d78c; margin-bottom:14px; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="mount" class="abs inset0"></div>
+  <div class="abs inset0" id="vignette"></div>
+
+  <div id="maskOverlay" class="abs inset0">
+    <div class="r1"></div><div class="r2"></div><div class="bridge"></div><div class="strap"></div>
+  </div>
+
+  <div id="hud">
+    <div id="hudTop" class="abs">
+      <div class="panel"><div class="label">ПРОТИВОГАЗЫ</div><div class="val" id="hudMask">0/6</div></div>
+      <div class="panel" id="maskToggleBtn"><div class="label">ПРОТИВОГАЗ</div><div class="val" id="maskToggleVal">НАДЕТЬ</div></div>
+      <div class="panel"><div class="label">ХАБАРЬ</div><div class="val" id="hudLoot">0/9</div></div>
+      <div class="panel"><div class="label">БАЛЛОН</div><div class="val" id="hudAmmo">10</div></div>
+      <div class="panel"><div class="label">ФОНАРЬ</div><div class="val" id="hudBatt">100%</div></div>
+      <div class="panel"><div class="label">ВРЕМЯ</div><div class="val" id="hudTime">7:00</div></div>
+    </div>
+
+    <div id="crosshair" class="abs"></div>
+    <div id="prompt" class="abs"></div>
+    <div id="toast" class="abs"></div>
+
+    <div id="hintDesktop" class="abs">WASD — движение · зажми и веди мышью — обзор · E — действие · F — надеть/снять противогаз</div>
+    <div id="hintSwipe" class="abs">свайп экрана — обзор</div>
+
+    <div id="joyZone" class="abs"><div id="joyKnob"></div></div>
+    <div id="interactBtn" class="abs">БАЛЛОН</div>
+  </div>
+
+  <div id="startScreen">
+    <h1>БУНКЕР: <span>ВЕНТШАХТА</span></h1>
+    <div class="sub">диггерство · заброшенный объект гражданской обороны</div>
+    <div class="rules">
+      <div id="startTouchText" style="display:none">
+        Джойстик — <b>движение</b><br>Свайп по экрану — <b>обзор</b><br>Кнопка справа — <b>действие</b>
+      </div>
+      <div id="startDesktopText" style="display:none">
+        <b>WASD</b> — движение &nbsp;·&nbsp; зажми <b>ЛКМ</b> и веди мышью — осмотр<br><b>E</b> — действие · <b>F</b> — надеть/снять противогаз
+      </div>
+      <br>Через люк во дворе — вниз, в бункер. Найди все <b>6 противогазов</b> — у каждого своя модель<br>
+      Ломай решётки, лезь в <b>вентшахту</b> — там спрятан один противогаз<br>
+      Вскрывай <b>ящики с хабарем</b> — краска, батарейки, трофеи. Следи за батареей фонаря
+    </div>
+    <div class="startbtn" id="startBtn">▶ НАЧАТЬ</div>
+  </div>
+
+  <div id="endScreen">
+    <h2 id="endTitle">КОНЕЦ</h2>
+    <p id="endText"></p>
+    <div class="startbtn" id="restartBtn">▶ ЗАНОВО</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const WALL_H = 4;
+const VENT_H = 1.3;
+const VENT_W = 1.4;
+const MOVE_SPEED = 6.2;
+const CROUCH_MULT = 0.55;
+const PLAYER_R = 0.4;
+const PLAYER_R_VENT = 0.28;
+const TIME_LIMIT = 420;
+const MASK_TARGET = 6;
+const START_AMMO = 10;
+const BATTERY_DRAIN = 100 / 480;
+
+const COL = {
+  bg: '#0a0704', amber: '#c9a24a', amberLight: '#f0d78c', amberDim: '#8a6f2a',
+  warn: '#e2734a', panelBg: 'rgba(10,7,4,0.62)', panelBorder: 'rgba(201,162,74,0.35)'
+};
+
+// ---------- canvas-generated textures (no external assets needed) ----------
+function makeCanvasTexture(draw, w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  draw(ctx, w, h);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+function posterTexture(lines, accent) {
+  return makeCanvasTexture((ctx, w, h) => {
+    ctx.fillStyle = '#d9d0ac'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = accent; ctx.fillRect(0, 0, w, 10); ctx.fillRect(0, h - 10, w, 10);
+    ctx.strokeStyle = accent; ctx.lineWidth = 4; ctx.strokeRect(6, 6, w - 12, h - 12);
+    ctx.fillStyle = '#241d10'; ctx.textAlign = 'center';
+    let y = 46;
+    lines.forEach((line, i) => {
+      ctx.font = i === 0 ? 'bold 24px monospace' : '16px monospace';
+      ctx.fillText(line, w / 2, y);
+      y += i === 0 ? 34 : 24;
+    });
+  }, 256, 170);
+}
+function labelTexture(text) {
+  return makeCanvasTexture((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(10,7,4,0.78)';
+    ctx.fillRect(0, h * 0.3, w, h * 0.42);
+    ctx.fillStyle = '#f0d78c';
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 30px monospace';
+    ctx.fillText(text, w / 2, h * 0.58);
+  }, 256, 80);
+}
+function grateTexture() {
+  return makeCanvasTexture((ctx, w, h) => {
+    ctx.fillStyle = '#2e2a1f'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#17140d'; ctx.lineWidth = 6;
+    for (let x = 0; x <= w; x += 22) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y <= h; y += 22) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  }, 128, 128);
+}
+function dialTexture() {
+  return makeCanvasTexture((ctx, w, h) => {
+    ctx.fillStyle = '#1c1811'; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 4; i++) {
+      const cx = 32 + i * 64, cy = h / 2, r = 22;
+      ctx.strokeStyle = '#c9a24a'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      const a = 0.6 + i * 0.9;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a)); ctx.stroke();
+    }
+  }, 256, 90);
+}
+function grassTexture() {
+  return makeCanvasTexture((ctx, w, h) => {
+    ctx.fillStyle = '#2e2a1a'; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) {
+      const x = Math.random() * w, y = Math.random() * h;
+      const g = 30 + Math.random() * 46;
+      ctx.fillStyle = `rgba(${g + 20},${g + 32},${g - 6},0.55)`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }, 128, 128);
+}
+function concreteTexture(c1, c2) {
+  return makeCanvasTexture((ctx, w, h) => {
+    ctx.fillStyle = c1; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1500; i++) {
+      const x = Math.random() * w, y = Math.random() * h, s = 1 + Math.random() * 3;
+      ctx.globalAlpha = 0.07 + Math.random() * 0.2;
+      ctx.fillStyle = c2;
+      ctx.fillRect(x, y, s, s);
+    }
+    ctx.globalAlpha = 1;
+  }, 128, 128);
+}
+
+const ROOMS = [
+  { cx: 12, near: 2, far: 8, grate: true },
+  { cx: 12, near: -2, far: -8, grate: false },
+  { cx: 22, near: 2, far: 8, grate: false },
+  { cx: 22, near: -2, far: -8, grate: false },
+  { cx: 34, near: -2, far: -8, grate: true },
+  { cx: 34, near: 2, far: 8, grate: true },
+];
+const CORRIDOR_GAPS = [[10.5, 13.5], [20.5, 23.5], [32.5, 35.5]];
+
+const MASKS = [
+  { name: 'ГП-5', type: 'gp5', pos: [22, 0, 5], color: 0x4a5a3a },
+  { name: 'ШП-5', type: 'shp5', pos: [23, 0, -5], color: 0x8f8a76 },
+  { name: 'ПМГ-2', type: 'pmg2', pos: [24, 0, -6.2], color: 0x53613c },
+  { name: 'Хомяк', type: 'homyak', pos: [9.6, 0, -3], color: 0x5a4632 },
+  { name: 'Нерехта', type: 'nerekhta', pos: [35.5, 0, 5], color: 0x2c3128 },
+  { name: 'ПБФ', type: 'pbf', pos: [25, 0, 10], color: 0x6b6a44 },
+];
+
+const POSTERS = [
+  { lines: ['ДИГГЕР —', 'НЕ ТУРИСТ.', 'СМОТРИ ПОД НОГИ'], accent: '#5a4a1a', pos: [5, 1.8, -1.85], rotY: 0 },
+  { lines: ['ВЫХОД', 'СЛЕДУЙ ЗА', 'СВЕТОМ'], accent: '#2c4a2c', pos: [37, 1.8, 1.85], rotY: Math.PI },
+  { lines: ['ПО СИГНАЛУ', '«ВНИМАНИЕ ВСЕМ»', '— В УКРЫТИЕ'], accent: '#8a2323', pos: [12, 1.8, 7.9], rotY: Math.PI },
+  { lines: ['НЕ КУРИТЬ', 'У ГЕНЕРАТОРА'], accent: '#8a2323', pos: [12, 1.8, -7.9], rotY: 0 },
+  { lines: ['ПРОВЕРЬ', 'ПРОТИВОГАЗ', 'ГП-5 / ШП-5 / ПМГ-2'], accent: '#2c4a2c', pos: [22, 1.8, 7.9], rotY: Math.PI },
+  { lines: ['СКЛАД ПБФ', 'ХРАНИТЬ СУХИМ'], accent: '#5a4a1a', pos: [22, 1.8, -7.9], rotY: 0 },
+  { lines: ['ФВУ', 'ФИЛЬТРЫ —', 'ЗАМЕНА ЕЖЕГОДНО'], accent: '#2c4a2c', pos: [31.1, 1.8, -5], rotY: Math.PI / 2 },
+  { lines: ['ГРАЖДАНСКАЯ', 'ОБОРОНА —', 'ДЕЛО КАЖДОГО'], accent: '#8a2323', pos: [31.1, 1.8, 5], rotY: Math.PI / 2 },
+];
+
+const CRATES = [
+  { pos: [-20, 4], loot: { type: 'battery', amount: 35, text: 'батарейка для фонаря' } },
+  { pos: [-24, -6], loot: { type: 'flavor', text: 'жетон «Зоркий страж»' } },
+  { pos: [5, 1.4], loot: { type: 'ammo', amount: 4, text: 'баллон краски' } },
+  { pos: [27, -1.4], loot: { type: 'flavor', text: 'фляга с водой' } },
+  { pos: [9.5, 7], loot: { type: 'flavor', text: 'банка тушёнки' } },
+  { pos: [23, -3.5], loot: { type: 'ammo', amount: 4, text: 'баллон краски' } },
+  { pos: [34.5, -3], loot: { type: 'battery', amount: 35, text: 'батарейка для фонаря' } },
+  { pos: [18, 10], loot: { type: 'flavor', text: 'компас Адрианова' } },
+  { pos: [36, 6.5], loot: { type: 'flavor', text: 'медаль «За оборону»' } },
+];
+
+// ---------- distinct low-poly gas mask silhouettes ----------
+function buildMaskModel(type, color) {
+  const group = new THREE.Group();
+  const rubber = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+  const lens = new THREE.MeshStandardMaterial({ color: 0x0c1210, roughness: 0.25, metalness: 0.4 });
+  const metalPart = new THREE.MeshStandardMaterial({ color: 0x2c2c26, roughness: 0.5, metalness: 0.6 });
+
+  if (type === 'gp5' || type === 'shp5') {
+    const s = type === 'shp5' ? 0.82 : 1;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22 * s, 12, 10), rubber);
+    head.scale.set(1, 1.1, 0.9); head.position.set(0, 0.55, 0);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.3 * s, 0.1 * s, 0.05), lens);
+    visor.position.set(0, 0.6, 0.19 * s); visor.rotation.x = -0.15;
+    const hose = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.35, 6), rubber);
+    hose.position.set(0.18, 0.35, 0.1); hose.rotation.z = 0.9;
+    const filter = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.28, 8), metalPart);
+    filter.position.set(0.3, 0.2, 0.12); filter.rotation.z = Math.PI / 2.2;
+    group.add(head, visor, hose, filter);
+  } else if (type === 'pmg2') {
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), rubber);
+    head.scale.set(1, 1.05, 0.9); head.position.set(0, 0.55, 0);
+    const eyeL = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.03, 10), lens);
+    eyeL.position.set(-0.09, 0.58, 0.18); eyeL.rotation.x = Math.PI / 2;
+    const eyeR = eyeL.clone(); eyeR.position.x = 0.09;
+    const filter = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.22, 8), metalPart);
+    filter.position.set(0, 0.48, 0.26); filter.rotation.x = Math.PI / 2;
+    group.add(head, eyeL, eyeR, filter);
+  } else if (type === 'homyak') {
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.26), rubber);
+    head.position.set(0, 0.55, 0);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 0.04), lens);
+    visor.position.set(0, 0.58, 0.15);
+    const hose = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 6), new THREE.MeshStandardMaterial({ color: 0x1c1c18, roughness: 0.7 }));
+    hose.position.set(0.2, 0.35, 0.05); hose.rotation.z = 1.1;
+    const filter = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.2, 8), metalPart);
+    filter.position.set(0.32, 0.22, 0.05); filter.rotation.z = Math.PI / 2.2;
+    group.add(head, visor, hose, filter);
+  } else if (type === 'nerekhta') {
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.26), rubber);
+    head.position.set(0, 0.55, 0);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.17, 0.04), lens);
+    visor.position.set(0, 0.58, 0.15);
+    const filterL = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.18, 8), metalPart);
+    filterL.position.set(-0.22, 0.5, 0.05); filterL.rotation.z = Math.PI / 2;
+    const filterR = filterL.clone(); filterR.position.x = 0.22;
+    group.add(head, visor, filterL, filterR);
+  } else {
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), rubber);
+    head.scale.set(1, 1.05, 0.85); head.position.set(0, 0.55, 0);
+    const eyeL = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.025, 8), lens);
+    eyeL.position.set(-0.08, 0.57, 0.16); eyeL.rotation.x = Math.PI / 2;
+    const eyeR = eyeL.clone(); eyeR.position.x = 0.08;
+    const filter = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.06, 0.22, 8), metalPart);
+    filter.position.set(0, 0.4, 0.05); filter.rotation.x = 0.3;
+    group.add(head, eyeL, eyeR, filter);
+  }
+  return group;
+}
+
+// ---------------- glue: global state & screen management ----------------
+let game = null;
+let isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+let maskWorn = false;
+
+const hudMaskEl = document.getElementById('hudMask');
+const hudAmmoEl = document.getElementById('hudAmmo');
+const hudLootEl = document.getElementById('hudLoot');
+const hudBattEl = document.getElementById('hudBatt');
+const hudTimeEl = document.getElementById('hudTime');
+const toastEl = document.getElementById('toast');
+const promptEl = document.getElementById('prompt');
+const interactBtnEl = document.getElementById('interactBtn');
+const maskToggleEl = document.getElementById('maskToggleBtn');
+const maskToggleValEl = document.getElementById('maskToggleVal');
+const joyZoneEl = document.getElementById('joyZone');
+const joyKnobEl = document.getElementById('joyKnob');
+const maskOverlayEl = document.getElementById('maskOverlay');
+const startScreenEl = document.getElementById('startScreen');
+const endScreenEl = document.getElementById('endScreen');
+const endTitleEl = document.getElementById('endTitle');
+const endTextEl = document.getElementById('endText');
+const hudTopEl = document.getElementById('hudTop');
+
+function showToast(msg) {
+  const el = toastEl;
+  if (!el) return;
+  el.textContent = msg;
+  el.style.opacity = 1;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = 0; }, 1300);
+}
+
+function toggleMaskWear() {
+  if (!game) return;
+  if (!game.inventory || game.inventory.length === 0) { showToast('НЕЧЕГО НАДЕТЬ'); return; }
+  game.wornMask = !game.wornMask;
+  maskWorn = game.wornMask;
+  maskOverlayEl.style.display = maskWorn ? 'block' : 'none';
+  maskToggleValEl.textContent = maskWorn ? 'СНЯТЬ' : 'НАДЕТЬ';
+  showToast(maskWorn ? 'ПРОТИВОГАЗ НАДЕТ' : 'ПРОТИВОГАЗ СНЯТ');
+}
+
+function showScreen(name) {
+  startScreenEl.style.display = name === 'start' ? 'flex' : 'none';
+  endScreenEl.style.display = (name === 'won' || name === 'time') ? 'flex' : 'none';
+  document.getElementById('hud').style.display = name === 'playing' ? 'block' : 'none';
+  if (name === 'won') {
+    endTitleEl.textContent = 'ВСЕ ПРОТИВОГАЗЫ НАЙДЕНЫ';
+    endTextEl.textContent = 'Ты обошёл весь двор, бункер и вентшахту, собрал полный комплект. Диггеры будут о тебе говорить.';
+  } else if (name === 'time') {
+    endTitleEl.textContent = 'ВРЕМЯ ВЫШЛО';
+    endTextEl.textContent = 'Время истекло — ты не успел собрать все противогазы.';
+  }
+}
+
+// ---------------- main three.js setup (runs once) ----------------
+function initGame() {
+    const mount = document.getElementById("mount");
+    const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d0906);
+    scene.fog = new THREE.FogExp2(0x151009, 0.026);
+
+    const camera = new THREE.PerspectiveCamera(72, mount.clientWidth / mount.clientHeight, 0.05, 100);
+    const renderer = new THREE.WebGLRenderer({ antialias: !isMobile, powerPreference: 'high-performance' });
+    renderer.setSize(mount.clientWidth, mount.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.4 : 2));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    mount.appendChild(renderer.domElement);
+    renderer.domElement.style.touchAction = 'none';
+    renderer.domElement.style.cursor = 'grab';
+
+    const ambient = new THREE.AmbientLight(0x3a2c18, 0.85);
+    scene.add(ambient);
+    const moon = new THREE.DirectionalLight(0x9fb4d4, 0.3);
+    moon.position.set(-30, 20, 10);
+    scene.add(moon);
+
+    const FLASH_BASE = 2.7, FILL_BASE = 0.6;
+    const flashlight = new THREE.SpotLight(0xffe0ae, FLASH_BASE, 21, Math.PI / 5.6, 0.45, 1.05);
+    camera.add(flashlight);
+    flashlight.position.set(0, 0, 0);
+    flashlight.target.position.set(0, 0, -1);
+    camera.add(flashlight.target);
+    const flashFill = new THREE.PointLight(0xffb347, FILL_BASE, 4.5, 2);
+    flashFill.position.set(0, -0.1, 0.3);
+    camera.add(flashFill);
+    scene.add(camera);
+
+    // ---------- materials ----------
+    const wallTex = concreteTexture('#3d3527', '#5f5138');
+    wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping; wallTex.repeat.set(3, 1.4);
+    const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.92 });
+
+    const floorTex = concreteTexture('#20190f', '#382c1c');
+    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping; floorTex.repeat.set(10, 6);
+    const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 1.0 });
+
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x171009, roughness: 1.0 });
+    const ventWallMat = new THREE.MeshStandardMaterial({ color: 0x4a4234, roughness: 0.7, metalness: 0.35 });
+    const ventFloorMat = new THREE.MeshStandardMaterial({ color: 0x332d22, roughness: 0.8, metalness: 0.2 });
+    const ventCeilMat = new THREE.MeshStandardMaterial({ color: 0x282318, roughness: 0.8, metalness: 0.2 });
+    const grateMat = new THREE.MeshStandardMaterial({ map: grateTexture(), roughness: 0.6, metalness: 0.5 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x3d3d33, roughness: 0.6, metalness: 0.4 });
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x342e21, roughness: 0.85 });
+    const crateMat = new THREE.MeshStandardMaterial({ color: 0x4a3a24, roughness: 0.9 });
+    const lootMat = new THREE.MeshStandardMaterial({ color: 0x4a5232, roughness: 0.85 });
+    const fenceMat = new THREE.MeshStandardMaterial({ color: 0x4a3a28, roughness: 0.9 });
+    const concreteMat = new THREE.MeshStandardMaterial({ color: 0x5a5648, roughness: 0.95 });
+    const boothMat = new THREE.MeshStandardMaterial({ color: 0x4a4436, roughness: 0.9 });
+    const carMat = new THREE.MeshStandardMaterial({ color: 0x5a3a2a, roughness: 0.95, metalness: 0.1 });
+    const carMat2 = new THREE.MeshStandardMaterial({ color: 0x4a2f22, roughness: 0.95 });
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.9 });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2c1c, roughness: 0.9 });
+    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x334423, roughness: 0.9 });
+    const hermaMat = new THREE.MeshStandardMaterial({ color: 0xd08a2a, roughness: 0.55 });
+    const ropeMat = new THREE.MeshStandardMaterial({ color: 0x8a7040, roughness: 0.9 });
+
+    const grassTex = grassTexture();
+    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping; grassTex.repeat.set(14, 14);
+    const groundMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1.0 });
+
+    const wallBoxes = [];
+    const sprayTargets = [];
+    const grates = [];
+    const ventZones = [];
+
+    function addBox(x, y, z, w, h, d, mat, collide) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+      sprayTargets.push(mesh);
+      if (collide !== false) wallBoxes.push({ min: { x: x - w / 2, z: z - d / 2 }, max: { x: x + w / 2, z: z + d / 2 } });
+      return mesh;
+    }
+    function addProp(x, y, z, w, h, d, mat, rotY, collide) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      mesh.position.set(x, y, z);
+      if (rotY) mesh.rotation.y = rotY;
+      scene.add(mesh);
+      if (collide) wallBoxes.push({ min: { x: x - w / 2, z: z - d / 2 }, max: { x: x + w / 2, z: z + d / 2 } });
+      return mesh;
+    }
+    function addCyl(x, y, z, r, h, mat, rotX, rotZ) {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), mat);
+      mesh.position.set(x, y, z);
+      if (rotX) mesh.rotation.x = rotX;
+      if (rotZ) mesh.rotation.z = rotZ;
+      scene.add(mesh);
+      return mesh;
+    }
+
+    // ---------- floors / ceiling ----------
+    const indoorFloor = new THREE.Mesh(new THREE.PlaneGeometry(44, 28), floorMat);
+    indoorFloor.rotation.x = -Math.PI / 2; indoorFloor.position.set(22, 0, 0);
+    scene.add(indoorFloor);
+    const outdoorGround = new THREE.Mesh(new THREE.PlaneGeometry(28, 28), groundMat);
+    outdoorGround.rotation.x = -Math.PI / 2; outdoorGround.position.set(-14, 0, 0);
+    scene.add(outdoorGround);
+    const bigCeil = new THREE.Mesh(new THREE.PlaneGeometry(40, 18), ceilMat);
+    bigCeil.rotation.x = Math.PI / 2; bigCeil.position.set(20, WALL_H, 0);
+    scene.add(bigCeil);
+
+    // ---------- outdoor yard ----------
+    const FX1 = -28, FX2 = 44, FZ1 = -14, FZ2 = 14;
+    addBox((FX1 + FX2) / 2, 1.2, FZ1, FX2 - FX1, 2.4, 0.2, fenceMat);
+    addBox((FX1 + FX2) / 2, 1.2, FZ2, FX2 - FX1, 2.4, 0.2, fenceMat);
+    addBox(FX1, 1.2, (FZ1 + FZ2) / 2, 0.2, 2.4, FZ2 - FZ1, fenceMat);
+    addBox(FX2, 1.2, (FZ1 + FZ2) / 2, 0.2, 2.4, FZ2 - FZ1, fenceMat);
+
+    function addTree(x, z) {
+      addCyl(x, 0.6, z, 0.13, 1.2, trunkMat);
+      const foliage = new THREE.Mesh(new THREE.ConeGeometry(1.1, 2.2, 8), foliageMat);
+      foliage.position.set(x, 1.9, z);
+      scene.add(foliage);
+    }
+    addTree(-22, 9); addTree(-8, -10); addTree(-25, -3); addTree(-6, 10);
+
+    function addRubble(x, z, rot) { addProp(x, 0.08, z, 1.4, 0.16, 1.0, concreteMat, rot); }
+    addRubble(-18, -3, 0.4); addRubble(-6, 6, -0.3); addRubble(-15, 11, 0.9);
+
+    addProp(-10, 0.55, -9, 2.3, 0.7, 1.1, carMat, 0, true);
+    addProp(-10, 1.05, -9, 1.1, 0.4, 1.0, carMat2, 0);
+    [[-0.9, -0.5], [-0.9, 0.5], [0.9, -0.5], [0.9, 0.5]].forEach(([ox, oz]) => {
+      addCyl(-10 + ox, 0.28, -9 + oz, 0.28, 0.22, wheelMat, Math.PI / 2, 0);
+    });
+
+    addProp(-24, 1.1, 10, 1.3, 2.2, 1.3, boothMat, 0, true);
+    addProp(-24, 2.35, 10, 1.7, 0.15, 1.7, boothMat);
+
+    // digger gear cache — right beside the walking path to the hatch, lit so it can't be missed
+    const gearLight = new THREE.PointLight(0xffc46a, 1.1, 6, 2);
+    gearLight.position.set(-3.3, 1.2, 0.9);
+    scene.add(gearLight);
+    const herma = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.62, 12), hermaMat);
+    herma.position.set(-3.3, 0.3, 0.9); herma.rotation.z = Math.PI / 2.3;
+    scene.add(herma);
+    const rope = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.055, 8, 16), ropeMat);
+    rope.position.set(-3.7, 0.09, 1.7); rope.rotation.x = Math.PI / 2;
+    scene.add(rope);
+    [0, 1, 2].forEach(i => addCyl(-2.5 + i * 0.24, 0.19, 1.3, 0.095, 0.38, new THREE.MeshStandardMaterial({ color: 0x5a6a3a, roughness: 0.6, metalness: 0.3 })));
+
+    const hatchRim = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.15, 16), concreteMat);
+    hatchRim.position.set(-1, 0.08, 0);
+    scene.add(hatchRim);
+    const hatchLid = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.06, 16), metalMat);
+    hatchLid.position.set(-2.1, 0.05, 1.0);
+    hatchLid.rotation.x = Math.PI / 2.3; hatchLid.rotation.z = 0.3;
+    scene.add(hatchLid);
+
+    const starGeo = new THREE.BufferGeometry();
+    const SN = 160;
+    const starPos = new Float32Array(SN * 3);
+    for (let i = 0; i < SN; i++) {
+      starPos[i * 3] = -30 + Math.random() * 90;
+      starPos[i * 3 + 1] = 12 + Math.random() * 14;
+      starPos[i * 3 + 2] = -18 + Math.random() * 36;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xe8dfc0, size: 0.09, transparent: true, opacity: 0.85 });
+    starMat.fog = false;
+    scene.add(new THREE.Points(starGeo, starMat));
+
+    // ---------- corridor spine ----------
+    function wallRunWithGaps(z) {
+      const pts = [0, ...CORRIDOR_GAPS.flatMap(g => g), 40];
+      for (let i = 0; i < pts.length; i += 2) {
+        const a = pts[i], b = pts[i + 1];
+        if (b > a) addBox((a + b) / 2, WALL_H / 2, z, b - a, WALL_H, 0.3, wallMat);
+      }
+    }
+    wallRunWithGaps(2);
+    wallRunWithGaps(-2);
+    addBox(40, WALL_H / 2, 0, 0.3, WALL_H, 4.3, wallMat);
+
+    addCyl(20, 3.65, -1.4, 0.06, 40, metalMat, 0, Math.PI / 2);
+    addCyl(20, 3.65, 1.4, 0.06, 40, metalMat, 0, Math.PI / 2);
+
+    // ---------- rooms ----------
+    function makeGrate(cx, z, width) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, VENT_H, 0.15), grateMat);
+      mesh.position.set(cx, VENT_H / 2, z);
+      scene.add(mesh);
+      const g = { mesh, broken: false, pos: new THREE.Vector3(cx, VENT_H / 2, z),
+        box: { min: { x: cx - width / 2, z: z - 0.2 }, max: { x: cx + width / 2, z: z + 0.2 } } };
+      grates.push(g);
+      return g;
+    }
+
+    ROOMS.forEach(r => {
+      const x1 = r.cx - 3, x2 = r.cx + 3;
+      const zLo = Math.min(r.near, r.far), zHi = Math.max(r.near, r.far);
+      addBox(x1, WALL_H / 2, (zLo + zHi) / 2, 0.3, WALL_H, zHi - zLo, wallMat);
+      addBox(x2, WALL_H / 2, (zLo + zHi) / 2, 0.3, WALL_H, zHi - zLo, wallMat);
+      if (r.grate) {
+        const g1 = r.cx - VENT_W / 2, g2 = r.cx + VENT_W / 2;
+        if (g1 > x1) addBox((x1 + g1) / 2, WALL_H / 2, r.far, g1 - x1, WALL_H, 0.3, wallMat);
+        if (x2 > g2) addBox((g2 + x2) / 2, WALL_H / 2, r.far, x2 - g2, WALL_H, 0.3, wallMat);
+        const lintelH = WALL_H - VENT_H;
+        addBox(r.cx, VENT_H + lintelH / 2, r.far, g2 - g1, lintelH, 0.3, wallMat, false);
+        makeGrate(r.cx, r.far, g2 - g1);
+      } else {
+        addBox(r.cx, WALL_H / 2, r.far, x2 - x1, WALL_H, 0.3, wallMat);
+      }
+    });
+
+    // ---------- room furniture / detail ----------
+    addProp(10, 0.3, 4, 1.7, 0.15, 0.7, woodMat);
+    addProp(10, 0.85, 4, 1.7, 0.15, 0.7, woodMat);
+    addProp(10, 0.3, 6.5, 1.7, 0.15, 0.7, woodMat);
+    addProp(10, 0.85, 6.5, 1.7, 0.15, 0.7, woodMat);
+    addProp(14, 0.4, 3, 0.8, 0.8, 0.6, woodMat);
+
+    addProp(12, 0.7, -5, 2.2, 1.4, 1.3, metalMat, 0, true);
+    addCyl(9.3, 3.4, -5, 0.07, 5, metalMat, Math.PI / 2, 0);
+    addCyl(9.3, 2.6, -5, 0.07, 5, metalMat, Math.PI / 2, 0);
+
+    addProp(20, 0.9, 4, 0.5, 1.4, 1.0, new THREE.MeshStandardMaterial({ color: 0xb9b39c, roughness: 0.7 }));
+    addProp(24, 0.4, 6, 1.6, 0.15, 0.7, woodMat);
+
+    addProp(20, 0.35, -4, 0.7, 0.7, 0.7, crateMat);
+    addProp(20.8, 0.35, -4.3, 0.7, 0.7, 0.7, crateMat);
+    addProp(20.4, 1.05, -4.15, 0.7, 0.7, 0.7, crateMat);
+    addProp(24, 0.55, -7, 1.6, 1.1, 0.5, woodMat);
+
+    addCyl(32, 0.9, -4, 0.35, 1.8, metalMat, 0, 0);
+    addCyl(33.2, 0.9, -6, 0.35, 1.8, metalMat, 0, 0);
+    addCyl(31.3, 3.3, -5, 0.07, 5, metalMat, 0, Math.PI / 2);
+
+    addProp(33, 0.55, 4, 1.6, 0.9, 0.6, woodMat);
+    const dialMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.5), new THREE.MeshStandardMaterial({ map: dialTexture(), roughness: 0.7 }));
+    dialMesh.position.set(33, 1.05, 4.31);
+    scene.add(dialMesh);
+    addCyl(34.4, 0.45, 4.6, 0.22, 0.5, metalMat, 0, 0);
+
+    // ---------- loot crates ("хабарь") ----------
+    const crates = CRATES.map(c => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.5, 0.55), lootMat);
+      mesh.position.set(c.pos[0], 0.25, c.pos[1]);
+      scene.add(mesh);
+      return { mesh, opened: false, loot: c.loot, pos: new THREE.Vector3(c.pos[0], 0.25, c.pos[1]) };
+    });
+    const CRATE_TARGET = crates.length;
+
+    // ---------- ventilation duct network ----------
+    function ductAlongX(xa, xb, z, gaps) {
+      gaps = gaps || [];
+      const xFrom = Math.min(xa, xb), xTo = Math.max(xa, xb);
+      const len = xTo - xFrom, cx = (xFrom + xTo) / 2;
+      addBox(cx, VENT_H / 2, z + VENT_W / 2, len, VENT_H, 0.12, ventWallMat);
+      const pts = [xFrom, ...gaps.flatMap(g => g), xTo];
+      for (let i = 0; i < pts.length; i += 2) {
+        const a = pts[i], b = pts[i + 1];
+        if (b > a) addBox((a + b) / 2, VENT_H / 2, z - VENT_W / 2, b - a, VENT_H, 0.12, ventWallMat);
+      }
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(len, VENT_W), ventFloorMat);
+      f.rotation.x = -Math.PI / 2; f.position.set(cx, 0.02, z); scene.add(f);
+      const c = new THREE.Mesh(new THREE.PlaneGeometry(len, VENT_W), ventCeilMat);
+      c.rotation.x = Math.PI / 2; c.position.set(cx, VENT_H, z); scene.add(c);
+      ventZones.push({ minX: xFrom, maxX: xTo, minZ: z - VENT_W / 2, maxZ: z + VENT_W / 2 });
+    }
+    function ductAlongZ(za, zb, x) {
+      const zFrom = Math.min(za, zb), zTo = Math.max(za, zb);
+      const len = zTo - zFrom, cz = (zFrom + zTo) / 2;
+      addBox(x - VENT_W / 2, VENT_H / 2, cz, 0.12, VENT_H, len, ventWallMat);
+      addBox(x + VENT_W / 2, VENT_H / 2, cz, 0.12, VENT_H, len, ventWallMat);
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(VENT_W, len), ventFloorMat);
+      f.rotation.x = -Math.PI / 2; f.position.set(x, 0.02, cz); scene.add(f);
+      const c = new THREE.Mesh(new THREE.PlaneGeometry(VENT_W, len), ventCeilMat);
+      c.rotation.x = Math.PI / 2; c.position.set(x, VENT_H, cz); scene.add(c);
+      ventZones.push({ minX: x - VENT_W / 2, maxX: x + VENT_W / 2, minZ: zFrom, maxZ: zTo });
+    }
+    ductAlongZ(-8, -10, 34);
+    ductAlongX(34, 42, -10);
+    ductAlongZ(-10, 10, 42);
+    ductAlongX(12, 42, 10, [[11.3, 12.7], [33.3, 34.7]]);
+    ductAlongZ(8, 10, 12);
+    ductAlongZ(8, 10, 34);
+
+    // ---------- posters ----------
+    POSTERS.forEach(p => {
+      const tex = posterTexture(p.lines, p.accent);
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.15), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
+      mesh.position.set(...p.pos);
+      mesh.rotation.y = p.rotY;
+      scene.add(mesh);
+      const nx = Math.sin(p.rotY), nz = Math.cos(p.rotY);
+      const posterLight = new THREE.PointLight(0xffcf8a, 0.6, 3.5, 2);
+      posterLight.position.set(p.pos[0] + nx * 0.7, p.pos[1] + 0.1, p.pos[2] + nz * 0.7);
+      scene.add(posterLight);
+    });
+
+    // ---------- gas masks (distinct models) ----------
+    const masks = MASKS.map(m => {
+      const group = buildMaskModel(m.type, m.color);
+      const glow = new THREE.PointLight(0xffcf8a, 0.4, 2.4);
+      glow.position.set(0, 0.6, 0);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(m.name), transparent: true, depthWrite: false }));
+      sprite.position.set(0, 1.05, 0);
+      sprite.scale.set(1.1, 0.34, 1);
+      group.add(glow, sprite);
+      group.position.set(m.pos[0], m.pos[1], m.pos[2]);
+      scene.add(group);
+      return { name: m.name, group, pos: new THREE.Vector3(...m.pos), collected: false };
+    });
+
+    // ---------- dust ----------
+    const dustGeo = new THREE.BufferGeometry();
+    const N = isMobile ? 110 : 200;
+    const positions = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      positions[i * 3] = Math.random() * 44;
+      positions[i * 3 + 1] = Math.random() * WALL_H;
+      positions[i * 3 + 2] = Math.random() * 20 - 10;
+    }
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const dustMat = new THREE.PointsMaterial({ color: 0xd6b467, size: 0.03, transparent: true, opacity: 0.3 });
+    const dustParticles = new THREE.Points(dustGeo, dustMat);
+    scene.add(dustParticles);
+
+    // ---------- old incandescent lamp fixtures ----------
+    const flickerLights = [];
+    const lampSpots = [[3, 0], [22, 0], [38, 0], [12, 5], [22, -5], [34, 5], [34, -5]];
+    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffe0ae });
+    const shadeMat = new THREE.MeshStandardMaterial({ color: 0x2a2a24, roughness: 0.5, metalness: 0.5 });
+    const FLICKER_COUNT = isMobile ? 5 : lampSpots.length;
+    for (let i = 0; i < FLICKER_COUNT; i++) {
+      const [lx, lz] = lampSpots[i];
+      const ly = 2.7;
+      const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, WALL_H - ly, 4), shadeMat);
+      wire.position.set(lx, (WALL_H + ly) / 2, lz);
+      scene.add(wire);
+      const shade = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.12, 10, 1, true), shadeMat);
+      shade.position.set(lx, ly + 0.08, lz);
+      scene.add(shade);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), bulbMat);
+      bulb.position.set(lx, ly, lz);
+      scene.add(bulb);
+      const pl = new THREE.PointLight(0xffc46a, 0.85, 9.5, 2);
+      pl.position.set(lx, ly, lz);
+      pl.userData.baseIntensity = 0.7 + Math.random() * 0.45;
+      pl.userData.flickerSeed = Math.random() * 100;
+      scene.add(pl);
+      flickerLights.push(pl);
+    }
+
+    // ---------- player ----------
+    game = {
+      scene, camera, renderer, mount,
+      wallBoxes, grates, masks, crates, ventZones, flickerLights, dustParticles, sprayTargets,
+      tags: [], inventory: [], wornMask: false,
+      player: { pos: new THREE.Vector3(-16, 1.6, 0) },
+      eyeHeight: 1.6,
+      yaw: -Math.PI / 2, pitch: 0,
+      walkCycle: 0,
+      keys: {},
+      touchMove: { x: 0, y: 0 },
+      lookTouchId: null, lookLast: { x: 0, y: 0 },
+      joyTouchId: null, joyOrigin: { x: 0, y: 0 },
+      pointerLocked: false,
+      dragging: false, dragLast: { x: 0, y: 0 }, downPos: { x: 0, y: 0 },
+      active: false,
+      masksCollected: 0, ammo: START_AMMO, timeLeft: TIME_LIMIT, battery: 100, batteryWarned: false,
+      lootFound: 0,
+      hovered: null,
+      clock: new THREE.Clock(),
+      raf: null,
+    };
+    game = game;
+
+    const onKeyDown = (e) => {
+      game.keys[e.code] = true;
+      if (e.code === 'KeyE') interact();
+      if (e.code === 'KeyF') toggleMaskWear();
+    };
+    const onKeyUp = (e) => { game.keys[e.code] = false; };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+
+    const onDocMouseMove = (e) => {
+      if (!game.pointerLocked) return;
+      game.yaw -= e.movementX * 0.0020;
+      game.pitch -= e.movementY * 0.0020;
+      game.pitch = Math.max(-1.3, Math.min(1.3, game.pitch));
+    };
+    document.addEventListener('mousemove', onDocMouseMove);
+    const onPointerLockChange = () => { game.pointerLocked = document.pointerLockElement === renderer.domElement; };
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+
+    const onCanvasMouseDown = (e) => {
+      if (!game.active) return;
+      game.dragging = true;
+      game.downPos = { x: e.clientX, y: e.clientY };
+      game.dragLast = { x: e.clientX, y: e.clientY };
+      renderer.domElement.style.cursor = 'grabbing';
+      if (!game.pointerLocked) { try { renderer.domElement.requestPointerLock(); } catch (err) {} }
+    };
+    const onWinMouseMove = (e) => {
+      if (!game.dragging || game.pointerLocked) return;
+      const dx = e.clientX - game.dragLast.x, dy = e.clientY - game.dragLast.y;
+      game.yaw -= dx * 0.0028;
+      game.pitch -= dy * 0.0028;
+      game.pitch = Math.max(-1.3, Math.min(1.3, game.pitch));
+      game.dragLast = { x: e.clientX, y: e.clientY };
+    };
+    const onWinMouseUp = (e) => {
+      if (!game.dragging) return;
+      game.dragging = false;
+      renderer.domElement.style.cursor = 'grab';
+      if (!game.active) return;
+      const dist = Math.hypot(e.clientX - game.downPos.x, e.clientY - game.downPos.y);
+      if (dist < 6) interact();
+    };
+    renderer.domElement.addEventListener('mousedown', onCanvasMouseDown);
+    window.addEventListener('mousemove', onWinMouseMove);
+    window.addEventListener('mouseup', onWinMouseUp);
+
+    // native touch look-drag on the canvas — passive:false so preventDefault
+    // actually stops the browser from panning/scrolling the page underneath
+    const onCanvasTouchStart = (e) => {
+      if (game.lookTouchId !== null) return;
+      const t = e.changedTouches[0];
+      game.lookTouchId = t.identifier;
+      game.lookLast = { x: t.clientX, y: t.clientY };
+      e.preventDefault();
+    };
+    const onCanvasTouchMove = (e) => {
+      if (game.lookTouchId === null) return;
+      for (const t of e.changedTouches) {
+        if (t.identifier !== game.lookTouchId) continue;
+        const dx = t.clientX - game.lookLast.x, dy = t.clientY - game.lookLast.y;
+        game.yaw -= dx * 0.0048;
+        game.pitch -= dy * 0.0048;
+        game.pitch = Math.max(-1.3, Math.min(1.3, game.pitch));
+        game.lookLast = { x: t.clientX, y: t.clientY };
+      }
+      e.preventDefault();
+    };
+    const onCanvasTouchEnd = (e) => {
+      for (const t of e.changedTouches) if (t.identifier === game.lookTouchId) game.lookTouchId = null;
+      e.preventDefault();
+    };
+    renderer.domElement.addEventListener('touchstart', onCanvasTouchStart, { passive: false });
+    renderer.domElement.addEventListener('touchmove', onCanvasTouchMove, { passive: false });
+    renderer.domElement.addEventListener('touchend', onCanvasTouchEnd, { passive: false });
+    renderer.domElement.addEventListener('touchcancel', onCanvasTouchEnd, { passive: false });
+
+    const onResize = () => {
+      const w = mount.clientWidth, h = mount.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    const ro = new ResizeObserver(onResize);
+    ro.observe(mount);
+
+    function updateHud() {
+      if (hudMaskEl) hudMaskEl.textContent = game.masksCollected + ' / ' + MASK_TARGET;
+      if (hudAmmoEl) hudAmmoEl.textContent = game.ammo;
+      if (hudLootEl) hudLootEl.textContent = game.lootFound + ' / ' + CRATE_TARGET;
+      if (hudBattEl) hudBattEl.textContent = Math.round(game.battery) + '%';
+      const m = Math.floor(game.timeLeft / 60), s = Math.floor(game.timeLeft % 60);
+      if (hudTimeEl) hudTimeEl.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    }
+    game.updateHud = updateHud;
+
+    function finish(result) {
+      game.active = false;
+      if (document.pointerLockElement) document.exitPointerLock();
+      showScreen(result);
+    }
+    game.finish = finish;
+
+    const raycaster = new THREE.Raycaster();
+    function interact() {
+      if (!game.active) return;
+      if (game.hovered) {
+        const h = game.hovered;
+        if (h.type === 'grate') {
+          h.ref.broken = true;
+          scene.remove(h.ref.mesh);
+          showToast('РЕШЁТКА СЛОМАНА');
+        } else if (h.type === 'mask') {
+          h.ref.collected = true;
+          scene.remove(h.ref.group);
+          game.masksCollected++;
+          game.inventory.push(h.ref.name);
+          updateHud();
+          showToast('НАЙДЕН ПРОТИВОГАЗ: ' + h.ref.name);
+          if (game.masksCollected >= MASK_TARGET) finish('won');
+        } else if (h.type === 'crate') {
+          const c = h.ref;
+          c.opened = true;
+          c.mesh.rotation.z = 0.45;
+          c.mesh.position.y = 0.15;
+          game.lootFound++;
+          if (c.loot.type === 'ammo') { game.ammo += c.loot.amount; showToast('ХАБАРЬ: +' + c.loot.amount + ' БАЛЛОН'); }
+          else if (c.loot.type === 'battery') { game.battery = Math.min(100, game.battery + c.loot.amount); showToast('ХАБАРЬ: БАТАРЕЙКА +' + c.loot.amount + '%'); }
+          else { showToast('ХАБАРЬ: ' + c.loot.text.toUpperCase()); }
+          updateHud();
+        }
+        return;
+      }
+      if (game.ammo <= 0) { showToast('НЕТ КРАСКИ'); return; }
+      const origin = new THREE.Vector3(), dir = new THREE.Vector3();
+      camera.getWorldPosition(origin);
+      camera.getWorldDirection(dir);
+      raycaster.set(origin, dir);
+      const hits = raycaster.intersectObjects(sprayTargets);
+      if (hits.length === 0 || hits[0].distance > 3.0) { showToast('НЕЧЕГО ДЕЛАТЬ ЗДЕСЬ'); return; }
+      const hit = hits[0];
+      game.ammo--; updateHud();
+      const colors = [0xc9a24a, 0xe2734a, 0xd8c25a, 0x8fbcd6];
+      const tagMat = new THREE.MeshBasicMaterial({ color: colors[Math.floor(Math.random() * colors.length)], transparent: true, opacity: 0.92, side: THREE.DoubleSide });
+      const tagMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9 + Math.random() * 0.5, 0.6 + Math.random() * 0.3), tagMat);
+      tagMesh.position.copy(hit.point).addScaledVector(hit.face.normal, 0.02);
+      tagMesh.lookAt(tagMesh.position.clone().add(hit.face.normal));
+      tagMesh.rotation.z = Math.random() * 0.3 - 0.15;
+      scene.add(tagMesh);
+      game.tags.push(tagMesh);
+      showToast('ТЕГ ПОСТАВЛЕН');
+    }
+    game.interact = interact;
+
+    function resolveCollision(pos, r) {
+      for (const box of wallBoxes) {
+        const cx = Math.max(box.min.x, Math.min(pos.x, box.max.x));
+        const cz = Math.max(box.min.z, Math.min(pos.z, box.max.z));
+        const dx = pos.x - cx, dz = pos.z - cz;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < r * r) { const d = Math.sqrt(d2) || 0.0001; const push = r - d; pos.x += (dx / d) * push; pos.z += (dz / d) * push; }
+      }
+      for (const g of grates) {
+        if (g.broken) continue;
+        const box = g.box;
+        const cx = Math.max(box.min.x, Math.min(pos.x, box.max.x));
+        const cz = Math.max(box.min.z, Math.min(pos.z, box.max.z));
+        const dx = pos.x - cx, dz = pos.z - cz;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < r * r) { const d = Math.sqrt(d2) || 0.0001; const push = r - d; pos.x += (dx / d) * push; pos.z += (dz / d) * push; }
+      }
+    }
+
+    function inVentZone(x, z) {
+      for (const v of ventZones) { if (x >= v.minX - 0.15 && x <= v.maxX + 0.15 && z >= v.minZ - 0.15 && z <= v.maxZ + 0.15) return true; }
+      return false;
+    }
+
+    function updateMovement(dt) {
+      const inVent = inVentZone(game.player.pos.x, game.player.pos.z);
+      const targetEye = inVent ? 0.95 : 1.6;
+      game.eyeHeight += (targetEye - game.eyeHeight) * Math.min(1, dt * 6);
+      const speedMult = inVent ? CROUCH_MULT : 1;
+      const r = inVent ? PLAYER_R_VENT : PLAYER_R;
+
+      const forward = new THREE.Vector3(Math.sin(game.yaw), 0, Math.cos(game.yaw)).multiplyScalar(-1);
+      const right = new THREE.Vector3(-forward.z, 0, forward.x);
+      const move = new THREE.Vector3();
+      if (game.keys['KeyW']) move.add(forward);
+      if (game.keys['KeyS']) move.sub(forward);
+      if (game.keys['KeyD']) move.add(right);
+      if (game.keys['KeyA']) move.sub(right);
+      move.add(forward.clone().multiplyScalar(game.touchMove.y));
+      move.add(right.clone().multiplyScalar(game.touchMove.x));
+      const moving = move.lengthSq() > 0.0001;
+      if (moving) {
+        const len = Math.min(move.length(), 1.6);
+        move.normalize().multiplyScalar(len).multiplyScalar(MOVE_SPEED * speedMult * dt);
+        game.player.pos.x += move.x;
+        game.player.pos.z += move.z;
+        resolveCollision(game.player.pos, r);
+        resolveCollision(game.player.pos, r);
+        game.walkCycle += dt * 9;
+      }
+      const bob = moving ? Math.sin(game.walkCycle) * 0.035 : 0;
+      camera.position.set(game.player.pos.x, game.eyeHeight + bob, game.player.pos.z);
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = game.yaw;
+      camera.rotation.x = game.pitch;
+    }
+
+    function updateInteractHover() {
+      const camPos = new THREE.Vector3(), camDir = new THREE.Vector3();
+      camera.getWorldPosition(camPos);
+      camera.getWorldDirection(camDir);
+      // two passes: first prefer whatever is closest to dead-centre of view (mouse-style aiming),
+      // but if nothing is well-aimed, fall back to "close enough" regardless of exact look direction —
+      // touch users aim coarsely via swipe, so pure crosshair-precision is too strict on a tablet/phone.
+      let best = null, bestDot = 0.35;
+      let nearest = null, nearestDist = 1.6;
+      const consider = (type, ref, pos) => {
+        const toObj = pos.clone().sub(camPos);
+        const dist = toObj.length();
+        if (dist > 3.2) return;
+        if (dist < nearestDist) { nearestDist = dist; nearest = { type, ref, dist }; }
+        toObj.normalize();
+        const dot = toObj.dot(camDir);
+        if (dot > bestDot) { bestDot = dot; best = { type, ref, dist }; }
+      };
+      grates.forEach(g => { if (!g.broken) consider('grate', g, g.pos); });
+      masks.forEach(m => { if (!m.collected) consider('mask', m, m.pos.clone().add(new THREE.Vector3(0, 0.6, 0))); });
+      crates.forEach(c => { if (!c.opened) consider('crate', c, c.pos.clone().add(new THREE.Vector3(0, 0.3, 0))); });
+      game.hovered = best || nearest;
+      const h = game.hovered;
+      let label = 'E — баллон';
+      if (h) label = h.type === 'grate' ? 'E — сломать решётку' : h.type === 'crate' ? 'E — открыть ящик' : 'E — поднять противогаз';
+      if (promptEl) promptEl.textContent = label;
+      if (interactBtnEl) interactBtnEl.textContent = h ? (h.type === 'grate' ? 'ЛОМАТЬ' : h.type === 'crate' ? 'ОТКРЫТЬ' : 'ВЗЯТЬ') : 'БАЛЛОН';
+    }
+
+    function animate() {
+      game.raf = requestAnimationFrame(animate);
+      const dt = Math.min(game.clock.getDelta(), 0.05);
+      for (const pl of flickerLights) {
+        const n = Math.sin(performance.now() * 0.005 + pl.userData.flickerSeed) * 0.5 + 0.5;
+        pl.intensity = pl.userData.baseIntensity * (0.8 + 0.2 * n) * (Math.random() > 0.99 ? 0.2 : 1);
+      }
+      masks.forEach(m => { if (!m.collected) m.group.rotation.y += dt * 0.6; });
+      dustParticles.rotation.y += dt * 0.01;
+      if (game.active) {
+        updateMovement(dt);
+        updateInteractHover();
+        game.timeLeft -= dt;
+        game.battery = Math.max(0, game.battery - dt * BATTERY_DRAIN);
+        const bf = 0.3 + 0.7 * (game.battery / 100);
+        flashlight.intensity = FLASH_BASE * bf;
+        flashFill.intensity = FILL_BASE * bf;
+        if (game.battery < 15 && !game.batteryWarned) { game.batteryWarned = true; showToast('БАТАРЕЯ ФОНАРЯ САДИТСЯ'); }
+        if (game.timeLeft <= 0) { game.timeLeft = 0; finish('time'); }
+        updateHud();
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+
+}
+
+// ---------------- touch controls (joystick / action button / mask toggle) ----------------
+function initTouchControls() {
+    if (!isTouch) return;
+    const joyEl = joyZoneEl;
+    const btnEl = interactBtnEl;
+    const maskEl = maskToggleEl;
+    if (!game || !joyEl || !btnEl) return;
+    const JOY_R = 50;
+
+    const joyStart = (e) => {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      const rect = joyEl.getBoundingClientRect();
+      game.joyTouchId = t.identifier;
+      game.joyOrigin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    };
+    const joyMove = (e) => {
+      if (game.joyTouchId === null) return;
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier !== game.joyTouchId) continue;
+        let dx = t.clientX - game.joyOrigin.x, dy = t.clientY - game.joyOrigin.y;
+        const d = Math.min(Math.hypot(dx, dy), JOY_R);
+        const ang = Math.atan2(dy, dx);
+        dx = Math.cos(ang) * d; dy = Math.sin(ang) * d;
+        game.touchMove = { x: dx / JOY_R, y: -dy / JOY_R };
+        if (joyKnobEl) joyKnobEl.style.transform = `translate(${dx}px, ${dy}px)`;
+      }
+    };
+    const joyEnd = (e) => {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier === game.joyTouchId) {
+          game.joyTouchId = null;
+          game.touchMove = { x: 0, y: 0 };
+          if (joyKnobEl) joyKnobEl.style.transform = 'translate(0px, 0px)';
+        }
+      }
+    };
+    const btnStart = (e) => { e.preventDefault(); if (game.interact) game.interact(); };
+    const maskStart = (e) => { e.preventDefault(); toggleMaskWear(); };
+
+    joyEl.addEventListener('touchstart', joyStart, { passive: false });
+    joyEl.addEventListener('touchmove', joyMove, { passive: false });
+    joyEl.addEventListener('touchend', joyEnd, { passive: false });
+    joyEl.addEventListener('touchcancel', joyEnd, { passive: false });
+    btnEl.addEventListener('touchstart', btnStart, { passive: false });
+    if (maskEl) maskEl.addEventListener('touchstart', maskStart, { passive: false });
+
+}
+
+function startGame() {
+    if (!game) return;
+    showScreen('playing');
+    game.active = true;
+    if (!isTouch) { try { game.renderer.domElement.requestPointerLock(); } catch (e) {} }
+    game.updateHud();
+}
+
+function restartGame() { window.location.reload(); }
+
+// ---------------- boot ----------------
+window.addEventListener('load', () => {
+  if (isTouch) {
+    document.body.classList.add('touch-mode');
+    joyZoneEl.style.display = 'block';
+    interactBtnEl.style.display = 'flex';
+    document.getElementById('hintSwipe').style.display = 'block';
+    document.getElementById('hintDesktop').style.display = 'none';
+    document.getElementById('startTouchText').style.display = 'block';
+    document.getElementById('startDesktopText').style.display = 'none';
+  } else {
+    document.getElementById('hintDesktop').style.display = 'block';
+    document.getElementById('startTouchText').style.display = 'none';
+    document.getElementById('startDesktopText').style.display = 'block';
+  }
+  initGame();
+  initTouchControls();
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('restartBtn').addEventListener('click', restartGame);
+  document.getElementById('maskToggleBtn').addEventListener('click', toggleMaskWear);
+});
+</script>
+</body>
+</html>
